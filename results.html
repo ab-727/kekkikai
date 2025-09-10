@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>結果発表</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f0f2f5; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; text-align: center; }
         .container { background: white; padding: 40px 60px; border-radius: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12); width: 90%; max-width: 1200px; }
@@ -49,6 +50,31 @@
         db.ref('userVotes').on('value', snapshot => { allUserVotes = snapshot.val() || []; renderResults(); });
         db.ref('state').on('value', snapshot => { currentState = snapshot.val() || {}; renderResults(); });
         
+        // 【追加】クラッカー演出を実行する関数
+        function fireConfetti() {
+            const duration = 3 * 1000; // 演出の時間（3秒）
+            const animationEnd = Date.now() + duration;
+            const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+            function randomInRange(min, max) {
+                return Math.random() * (max - min) + min;
+            }
+
+            const interval = setInterval(function() {
+                const timeLeft = animationEnd - Date.now();
+
+                if (timeLeft <= 0) {
+                    return clearInterval(interval);
+                }
+
+                const particleCount = 50 * (timeLeft / duration);
+                // 画面の左側から発射
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+                // 画面の右側から発射
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+            }, 250);
+        }
+
         // 【追加】クリックで結果を表示する関数
         function revealWinners() {
             const prompt = document.getElementById('reveal-prompt');
@@ -56,6 +82,7 @@
             if (prompt && reveal) {
                 prompt.style.display = 'none';
                 reveal.style.display = 'block';
+                fireConfetti();
             }
         }
 
