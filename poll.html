@@ -12,6 +12,10 @@
                 margin: 0 auto;
                 padding: 20px;
                 background-color: #f5f5f5;
+                box-sizing: border-box;
+            }
+            *, *::before, *::after {
+                box-sizing: inherit;
             }
             .container {
                 background: white;
@@ -84,6 +88,7 @@
                 cursor: pointer;
                 transition: all 0.2s;
                 position: relative;
+                display: block;
             }
             .option:hover {
                 border-color: #007bff;
@@ -92,17 +97,10 @@
             .option input[type="radio"] {
                 margin-right: 10px;
             }
-            .correct-answer {
-                border-color: #28a745;
-                background: #f8fff8;
-            }
-            .correct-indicator {
-                position: absolute;
-                right: 10px;
-                top: 50%;
-                transform: translateY(-50%);
-                color: #28a745;
-                font-weight: bold;
+            .option.voted {
+                background-color: #e9ecef;
+                border-color: #ced4da;
+                cursor: not-allowed;
             }
             .voter-info {
                 background: #e7f3ff;
@@ -154,26 +152,6 @@
             .btn-warning:hover {
                 background: #e0a800;
             }
-            .results {
-                margin-top: 30px;
-                display: none;
-            }
-            .result-item {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 10px;
-                margin: 5px 0;
-                background: #f8f9fa;
-                border-radius: 5px;
-            }
-            .result-bar {
-                background: #007bff;
-                height: 20px;
-                border-radius: 10px;
-                margin: 5px 0;
-                transition: width 0.5s ease;
-            }
             .message {
                 padding: 15px;
                 border-radius: 5px;
@@ -216,10 +194,12 @@
                 display: flex;
                 align-items: center;
                 margin: 5px 0;
+                gap: 10px;
             }
+            /* 【修正】選択肢入力欄の幅を修正 */
             .option-input input[type="text"] {
-                flex: 1;
-                margin-right: 10px;
+                flex: 1 1 auto;
+                width: 100%; /* これで幅が広がるように */
             }
             .option-input input[type="radio"] {
                 margin-right: 5px;
@@ -234,6 +214,7 @@
                 border-radius: 8px;
                 margin-bottom: 10px;
                 border: 1px solid #ddd;
+                transition: all 0.3s ease;
             }
             .question-item.active {
                 border-color: #28a745;
@@ -242,6 +223,12 @@
             .question-item.inactive {
                 border-color: #dc3545;
                 background: #fff5f5;
+            }
+            /* 【追加】出題中の問題を目立たせるスタイル */
+            .question-item.broadcasting {
+                border-color: #007bff;
+                box-shadow: 0 0 10px rgba(0, 123, 255, 0.5);
+                border-width: 2px;
             }
             .stats-grid {
                 display: grid;
@@ -263,6 +250,43 @@
             .hidden {
                 display: none;
             }
+            .admin-result-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 5px 0;
+                font-size: 14px;
+            }
+            .admin-result-bar-container {
+                background: #e9ecef;
+                border-radius: 5px;
+                margin: 2px 0 10px 0;
+                overflow: hidden;
+            }
+            .admin-result-bar {
+                background: #007bff;
+                height: 15px;
+                border-radius: 5px;
+                transition: width 0.5s ease;
+                color: white;
+                font-size: 12px;
+                line-height: 15px;
+                text-align: right;
+                padding-right: 5px;
+            }
+            @media (max-width: 600px) {
+                .options {
+                    display: flex;
+                    flex-direction: column;
+                }
+                .container {
+                    padding: 15px;
+                }
+                .mode-btn {
+                    padding: 10px 15px;
+                    font-size: 14px;
+                }
+            }
         </style>
     </head>
     <body>
@@ -274,7 +298,6 @@
                 <button class="mode-btn" onclick="switchMode('admin')">管理者</button>
             </div>
 
-            <!-- 投票者モード -->
             <div id="vote-mode">
                 <div class="voter-info">
                     <h3>👤 投票者情報</h3>
@@ -282,24 +305,14 @@
                 </div>
 
                 <div id="questions-container">
-                    <!-- 動的に問題が表示される -->
-                </div>
+                    </div>
 
-                <div class="message success" id="successMessage">✅ 投票が完了しました！ありがとうございます。</div>
-
-                <div class="message error" id="errorMessage">❌ エラーが発生しました。もう一度お試しください。</div>
+                <div class="message success" id="successMessage"></div>
+                <div class="message error" id="errorMessage"></div>
 
                 <button onclick="submitVote()" id="voteButton">投票する</button>
-                <button onclick="showResults()" class="btn-success">結果を見る</button>
-
-                <div class="results" id="results">
-                    <h3>📊 投票結果</h3>
-                    <div id="resultsList"></div>
-                    <p style="color: #666; font-size: 14px; margin-top: 20px">総投票数: <span id="totalVotes">0</span>票</p>
-                </div>
             </div>
 
-            <!-- 管理者モード -->
             <div id="admin-mode" class="hidden">
                 <div class="admin-login" id="admin-login">
                     <h3>🔐 管理者ログイン</h3>
@@ -309,8 +322,10 @@
 
                 <div class="admin-panel" id="admin-panel">
                     <h3>📝 問題管理</h3>
+                    <div class="question-form">
+                        <button onclick="setCurrentQuestion(null)" class="btn-danger">現在の出題を停止</button>
+                    </div>
 
-                    <!-- 新しい問題作成 -->
                     <div class="question-form">
                         <h4>新しい問題を作成</h4>
                         <input type="text" id="newQuestionTitle" placeholder="問題タイトル" />
@@ -332,18 +347,13 @@
                         <button onclick="createQuestion()" class="btn-warning">問題作成</button>
                     </div>
 
-                    <!-- 既存問題一覧 -->
                     <div class="question-list" id="admin-questions-list">
                         <h4>既存の問題</h4>
-                        <!-- 動的に問題一覧が表示される -->
                     </div>
 
-                    <!-- 統計情報 -->
                     <div id="admin-stats">
                         <h3>📊 統計情報</h3>
-                        <div class="stats-grid" id="stats-container">
-                            <!-- 動的に統計が表示される -->
-                        </div>
+                        <div class="stats-grid" id="stats-container"></div>
                     </div>
 
                     <button onclick="adminLogout()" class="btn-danger">ログアウト</button>
@@ -355,7 +365,7 @@
         <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
         <script>
-            // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+            // Firebase設定
             const firebaseConfig = {
                 apiKey: "AIzaSyA0G-ZXD_90Tk698OzmDmDSObURkxgmsEE",
                 authDomain: "kekki-c7090.firebaseapp.com",
@@ -366,96 +376,62 @@
                 appId: "1:6528604747:web:d1cd3a5e9d6e70a1e48bce",
                 measurementId: "G-S44YVP0G3N",
             };
-
-            // Firebaseを初期化
             firebase.initializeApp(firebaseConfig);
-            const database = firebase.database();
-        </script>
-
-        <script>
-            // Firebaseのデータベースを参照
             const db = firebase.database();
 
-            // 初期データとグローバル変数
+            // グローバル変数
             const DEFAULT_PASSWORD = "admin123";
             let currentMode = "vote";
             let isAdminLoggedIn = false;
             let optionCount = 2;
-
-            // データを保持するローカル変数
             let questions = [];
             let voters = [];
             let userVotes = {};
+            let currentQuestionId = null; // 【追加】現在の問題ID
 
             // --- Firebaseとのデータ同期 ---
 
-            // 1. 問題データの同期
-            db.ref("questions").on("value", (snapshot) => {
-                const data = snapshot.val();
-                if (data) {
-                    questions = data;
-                } else {
-                    // DBにデータがない場合、初期データを書き込む
-                    const initialQuestions = [
-                        {
-                            id: 1,
-                            title: "あなたが最も好きなプログラミング言語は？",
-                            description: "",
-                            options: ["Python", "JavaScript", "Java", "C++"],
-                            correctAnswer: 0,
-                            active: true,
-                            votes: [0, 0, 0, 0],
-                        },
-                    ];
-                    db.ref("questions").set(initialQuestions);
+            // 【追加】投票の状態（どの問題が出題中か）を同期
+            db.ref("state/currentQuestionId").on("value", (snapshot) => {
+                currentQuestionId = snapshot.val();
+                if (currentMode === "vote") {
+                    renderCurrentQuestion();
                 }
-                // 画面を再描画
-                if (currentMode === "vote") renderQuestions();
+                if (isAdminLoggedIn) {
+                    renderAdminQuestions(); // ハイライト表示を更新
+                }
+            });
+
+            db.ref("questions").on("value", (snapshot) => {
+                questions = snapshot.val() || [];
+                if (currentMode === "vote") {
+                    renderCurrentQuestion();
+                }
                 if (isAdminLoggedIn) {
                     renderAdminQuestions();
                     renderAdminStats();
                 }
             });
 
-            // 2. 投票者データの同期
             db.ref("voters").on("value", (snapshot) => {
                 voters = snapshot.val() || [];
                 if (isAdminLoggedIn) renderAdminStats();
             });
 
-            // 3. ユーザーごとの投票記録の同期
             db.ref("userVotes").on("value", (snapshot) => {
                 userVotes = snapshot.val() || {};
+                if (currentMode === "vote") {
+                    renderCurrentQuestion(); // 投票済み状態を反映
+                }
             });
 
-            // --- ローカルストレージを使っていた関数をFirebaseを使うように変更 ---
-
-            function getQuestions() {
-                return questions;
-            }
-
-            function getVoters() {
-                return voters;
-            }
-
-            function getVotes() {
-                return userVotes;
-            }
-
-            function saveQuestions(newQuestions) {
-                db.ref("questions").set(newQuestions);
-            }
-
-            function saveVoters(newVoters) {
-                db.ref("voters").set(newVoters);
-            }
-
-            function saveVotes(newUserVotes) {
-                db.ref("userVotes").set(newUserVotes);
-            }
-
-            // --- 以下、既存の関数（ほぼ変更なし） ---
-
+            // --- データ操作関数 ---
+            function saveQuestions(newQuestions) { db.ref("questions").set(newQuestions); }
+            function saveVoters(newVoters) { db.ref("voters").set(newVoters); }
+            function saveVotes(newUserVotes) { db.ref("userVotes").set(newUserVotes); }
+            // 【追加】現在の問題を設定する関数
+            function setCurrentQuestion(questionId) { db.ref("state/currentQuestionId").set(questionId); }
+            
             // モード切り替え
             function switchMode(mode) {
                 currentMode = mode;
@@ -464,7 +440,7 @@
                 if (mode === "vote") {
                     document.getElementById("vote-mode").classList.remove("hidden");
                     document.getElementById("admin-mode").classList.add("hidden");
-                    renderQuestions();
+                    renderCurrentQuestion();
                 } else {
                     document.getElementById("vote-mode").classList.add("hidden");
                     document.getElementById("admin-mode").classList.remove("hidden");
@@ -475,7 +451,114 @@
                 }
             }
 
-            // 管理者ログイン
+            // 【修正】投票者用の問題表示を一問ずつに変更
+            function renderCurrentQuestion() {
+                const container = document.getElementById("questions-container");
+                container.innerHTML = "";
+
+                if (currentQuestionId === null || currentQuestionId === undefined) {
+                    container.innerHTML = "<h3>管理者が問題を出題するまでお待ちください...</h3>";
+                    document.getElementById("voteButton").style.display = "none";
+                    return;
+                }
+
+                const question = questions.find(q => q && q.id === currentQuestionId);
+                if (!question) {
+                    container.innerHTML = "<h3>問題の読み込みに失敗しました。</h3>";
+                    document.getElementById("voteButton").style.display = "none";
+                    return;
+                }
+
+                document.getElementById("voteButton").style.display = "inline-block";
+
+                const questionDiv = document.createElement("div");
+                questionDiv.className = "question";
+                questionDiv.setAttribute("data-question-id", question.id);
+
+                const titleElement = document.createElement("h3");
+                titleElement.textContent = question.title;
+                questionDiv.appendChild(titleElement);
+                if (question.description) {
+                    const descElement = document.createElement("p");
+                    descElement.textContent = question.description;
+                    questionDiv.appendChild(descElement);
+                }
+
+                const voterName = document.getElementById("voterName").value.trim();
+                const hasVotedForThis = userVotes[voterName] && userVotes[voterName][question.id] !== undefined;
+
+                const optionsDiv = document.createElement("div");
+                optionsDiv.className = "options";
+                question.options.forEach((option, index) => {
+                    const label = document.createElement("label");
+                    label.className = "option";
+                    const radio = document.createElement("input");
+                    radio.type = "radio";
+                    radio.name = `vote-${question.id}`;
+                    radio.value = index;
+
+                    if (hasVotedForThis) {
+                        radio.disabled = true;
+                        label.classList.add("voted");
+                        if (userVotes[voterName][question.id] === index) {
+                            radio.checked = true;
+                            label.style.borderColor = "#007bff";
+                        }
+                    }
+
+                    const optionText = document.createTextNode(option);
+                    label.appendChild(radio);
+                    label.appendChild(optionText);
+                    optionsDiv.appendChild(label);
+                });
+                questionDiv.appendChild(optionsDiv);
+                container.appendChild(questionDiv);
+
+                if (hasVotedForThis) {
+                    showMessage("success", `「${question.title}」には投票済みです。`);
+                    document.getElementById("voteButton").disabled = true;
+                } else {
+                    document.getElementById("voteButton").disabled = false;
+                }
+            }
+            
+            // 【修正】投票処理を現在の問題のみに限定
+            function submitVote() {
+                const voterName = document.getElementById("voterName").value.trim();
+                if (!voterName) return showMessage("error", "お名前を入力してください。");
+
+                if (!currentQuestionId) return showMessage("error", "出題中の問題がありません。");
+
+                const allVoters = voters || [];
+                const question = questions.find(q => q && q.id === currentQuestionId);
+                const selectedOption = document.querySelector(`input[name="vote-${question.id}"]:checked`);
+
+                if (!selectedOption) return showMessage("error", "選択肢を選んでください。");
+
+                const optionIndex = parseInt(selectedOption.value);
+                const allQuestions = questions;
+                const questionInAll = allQuestions.find((q) => q && q.id === question.id);
+                if (!questionInAll.votes) {
+                    questionInAll.votes = new Array(questionInAll.options.length).fill(0);
+                }
+                questionInAll.votes[optionIndex]++;
+
+                if (!userVotes[voterName]) userVotes[voterName] = {};
+                userVotes[voterName][question.id] = optionIndex;
+
+                saveQuestions(allQuestions);
+                saveVotes(userVotes);
+                if (!allVoters.includes(voterName)) {
+                    allVoters.push(voterName);
+                    saveVoters(allVoters);
+                }
+
+                showMessage("success", "投票が完了しました！");
+                document.getElementById("voterName").disabled = true; // 一度投票したら名前は変更不可
+                renderCurrentQuestion(); // 画面を更新して投票済み状態にする
+            }
+
+            // --- 管理者機能 ---
             function adminLogin() {
                 const password = document.getElementById("adminPassword").value;
                 if (password === DEFAULT_PASSWORD) {
@@ -497,188 +580,133 @@
                 document.getElementById("adminPassword").value = "";
             }
 
-            // 問題表示（投票者用）
-            function renderQuestions() {
-                const activeQuestions = getQuestions().filter((q) => q && q.active);
-                const container = document.getElementById("questions-container");
-                container.innerHTML = ""; // 以前のコンテンツをクリア
-
-                if (activeQuestions.length === 0) {
-                    container.innerHTML = "<p>現在アクティブな問題がありません。</p>";
-                    return;
-                }
-
-                activeQuestions.forEach((question) => {
-                    const questionDiv = document.createElement("div");
-                    questionDiv.className = "question";
-                    questionDiv.setAttribute("data-question-id", question.id);
-
-                    const titleElement = document.createElement("h3");
-                    titleElement.textContent = question.title;
-                    questionDiv.appendChild(titleElement);
-
-                    if (question.description) {
-                        const descElement = document.createElement("p");
-                        descElement.textContent = question.description;
-                        questionDiv.appendChild(descElement);
-                    }
-
-                    const optionsDiv = document.createElement("div");
-                    optionsDiv.className = "options";
-                    question.options.forEach((option, index) => {
-                        const label = document.createElement("label");
-                        label.className = "option";
-                        const radio = document.createElement("input");
-                        radio.type = "radio";
-                        radio.name = `vote-${question.id}`;
-                        radio.value = index;
-                        const optionText = document.createTextNode(option);
-                        label.appendChild(radio);
-                        label.appendChild(optionText);
-                        optionsDiv.appendChild(label);
-                    });
-                    questionDiv.appendChild(optionsDiv);
-                    container.appendChild(questionDiv);
-                });
-            }
-
-            // 管理者用問題一覧
+            // 【修正】管理者用問題一覧に「出題」ボタンなどを追加
             function renderAdminQuestions() {
-                const allQuestions = getQuestions();
+                const allQuestions = questions;
                 const container = document.getElementById("admin-questions-list");
-                container.innerHTML = "<h4>既存の問題</h4>"; // クリアして見出しを追加
+                container.innerHTML = "<h4>既存の問題</h4>"; 
 
-                allQuestions.forEach((question, index) => {
-                    // idの代わりにindexを使う
-                    if (!question) return; // 削除されたデータはスキップ
+                allQuestions.forEach((question) => {
+                    if (!question) return; 
 
                     const questionItem = document.createElement("div");
                     questionItem.className = `question-item ${question.active ? "active" : "inactive"}`;
+                    // 現在出題中の問題にハイライトを追加
+                    if (question.id === currentQuestionId) {
+                        questionItem.classList.add("broadcasting");
+                    }
+                    
                     const title = document.createElement("h5");
                     title.textContent = question.title;
                     questionItem.appendChild(title);
 
-                    const optionsP = document.createElement("p");
-                    optionsP.textContent = "選択肢: " + question.options.join(", ");
-                    questionItem.appendChild(optionsP);
-
-                    const correctP = document.createElement("p");
-                    correctP.textContent = `正解: ${question.options[question.correctAnswer]} (${question.correctAnswer + 1}番目)`;
-                    questionItem.appendChild(correctP);
-
-                    const totalVotes = question.votes ? question.votes.reduce((a, b) => a + b, 0) : 0;
-                    const votesP = document.createElement("p");
-                    votesP.textContent = `投票数: ${totalVotes}票`;
-                    questionItem.appendChild(votesP);
-
                     const statusP = document.createElement("p");
                     statusP.textContent = `状態: ${question.active ? "アクティブ" : "非アクティブ"}`;
                     questionItem.appendChild(statusP);
+                    
+                    const graphContainer = document.createElement("div");
+                    graphContainer.style.marginTop = "15px";
+
+                    const questionTotalVotes = question.votes ? question.votes.reduce((a, b) => a + b, 0) : 0;
+                    const totalVotesP = document.createElement("p");
+                    totalVotesP.textContent = `総投票数: ${questionTotalVotes}票`;
+                    totalVotesP.style.fontWeight = "bold";
+                    graphContainer.appendChild(totalVotesP);
+
+                    if (questionTotalVotes > 0) {
+                        question.options.forEach((option, idx) => {
+                            const count = question.votes ? question.votes[idx] : 0;
+                            const percentage = ((count / questionTotalVotes) * 100).toFixed(1);
+
+                            const resultItem = document.createElement("div");
+                            resultItem.className = "admin-result-item";
+                            const optionSpan = document.createElement("span");
+                            optionSpan.textContent = option;
+                            if (idx === question.correctAnswer) {
+                                optionSpan.textContent += " (正解)";
+                                optionSpan.style.fontWeight = "bold";
+                                optionSpan.style.color = "#28a745";
+                            }
+                            const countSpan = document.createElement("span");
+                            countSpan.textContent = `${count}票 (${percentage}%)`;
+                            resultItem.appendChild(optionSpan);
+                            resultItem.appendChild(countSpan);
+                            graphContainer.appendChild(resultItem);
+
+                            const barContainer = document.createElement("div");
+                            barContainer.className = "admin-result-bar-container";
+                            const resultBar = document.createElement("div");
+                            resultBar.className = "admin-result-bar";
+                            resultBar.style.width = `${percentage}%`;
+                            if(percentage > 15) { resultBar.textContent = `${percentage}%`; }
+                            barContainer.appendChild(resultBar);
+                            graphContainer.appendChild(barContainer);
+                        });
+                    } else {
+                        const noVotesP = document.createElement("p");
+                        noVotesP.textContent = "まだ投票がありません。";
+                        noVotesP.style.fontSize = "14px";
+                        noVotesP.style.color = "#6c757d";
+                        graphContainer.appendChild(noVotesP);
+                    }
+                    questionItem.appendChild(graphContainer);
+                    
+                    // --- ボタンエリア ---
+                    const btnContainer = document.createElement("div");
+                    
+                    const broadcastBtn = document.createElement("button");
+                    broadcastBtn.textContent = "この問題を出題";
+                    broadcastBtn.className = "btn-success";
+                    broadcastBtn.disabled = (question.id === currentQuestionId);
+                    broadcastBtn.onclick = () => setCurrentQuestion(question.id);
+                    btnContainer.appendChild(broadcastBtn);
 
                     const toggleBtn = document.createElement("button");
                     toggleBtn.textContent = question.active ? "無効化" : "有効化";
                     toggleBtn.className = question.active ? "btn-danger" : "btn-success";
                     toggleBtn.onclick = () => toggleQuestion(question.id);
-                    questionItem.appendChild(toggleBtn);
+                    btnContainer.appendChild(toggleBtn);
 
                     const deleteBtn = document.createElement("button");
                     deleteBtn.textContent = "削除";
                     deleteBtn.className = "btn-danger";
                     deleteBtn.onclick = () => deleteQuestion(question.id);
-                    questionItem.appendChild(deleteBtn);
-
+                    btnContainer.appendChild(deleteBtn);
+                    
+                    questionItem.appendChild(btnContainer);
                     container.appendChild(questionItem);
                 });
             }
 
-            // 統計情報表示
             function renderAdminStats() {
-                const allQuestions = getQuestions();
-                const allVoters = getVoters();
-
+                const allVoters = voters || [];
                 let totalVotes = 0;
-                let correctAnswers = 0;
-                let questionStats = [];
-
-                allQuestions.forEach((question) => {
-                    if (!question) return;
-                    const questionVotes = question.votes ? question.votes.reduce((a, b) => a + b, 0) : 0;
-                    totalVotes += questionVotes;
-
-                    const correctVotes = question.votes ? question.votes[question.correctAnswer] : 0;
-                    correctAnswers += correctVotes;
-
-                    const accuracy = questionVotes > 0 ? ((correctVotes / questionVotes) * 100).toFixed(1) : 0;
-
-                    questionStats.push({
-                        title: question.title,
-                        totalVotes: questionVotes,
-                        correctVotes: correctVotes,
-                        accuracy: accuracy,
-                    });
-                });
-
-                const overallAccuracy = totalVotes > 0 ? ((correctAnswers / totalVotes) * 100).toFixed(1) : 0;
-
+                questions.forEach(q => { if(q && q.votes) totalVotes += q.votes.reduce((a,b) => a+b, 0); });
                 const container = document.getElementById("stats-container");
-                container.innerHTML = ""; // クリア
-
+                container.innerHTML = "";
                 const createStatCard = (title, number, description) => {
-                    const card = document.createElement("div");
-                    card.className = "stat-card";
-                    const h5 = document.createElement("h5");
-                    h5.textContent = title;
-                    card.appendChild(h5);
-                    const statNumber = document.createElement("div");
-                    statNumber.className = "stat-number";
-                    statNumber.textContent = number;
-                    card.appendChild(statNumber);
-                    const p = document.createElement("p");
-                    p.textContent = description;
-                    card.appendChild(p);
+                    const card = document.createElement("div"); card.className = "stat-card";
+                    const h5 = document.createElement("h5"); h5.textContent = title; card.appendChild(h5);
+                    const statNumber = document.createElement("div"); statNumber.className = "stat-number"; statNumber.textContent = number; card.appendChild(statNumber);
+                    const p = document.createElement("p"); p.textContent = description; card.appendChild(p);
                     return card;
                 };
-
-                container.appendChild(createStatCard("全体統計", totalVotes, "総投票数"));
-                container.appendChild(createStatCard("登録者数", allVoters.length, "投票者"));
-                container.appendChild(createStatCard("全体正答率", `${overallAccuracy}%`, "正解率"));
-                container.appendChild(createStatCard("問題数", allQuestions.filter((q) => q).length, "作成済み問題"));
-
-                questionStats.forEach((stat) => {
-                    const card = document.createElement("div");
-                    card.className = "stat-card";
-                    const h5 = document.createElement("h5");
-                    h5.textContent = stat.title;
-                    card.appendChild(h5);
-                    const statNumber = document.createElement("div");
-                    statNumber.className = "stat-number";
-                    statNumber.textContent = `${stat.accuracy}%`;
-                    card.appendChild(statNumber);
-                    const p = document.createElement("p");
-                    p.textContent = `正答率 (${stat.correctVotes}/${stat.totalVotes})`;
-                    card.appendChild(p);
-                    container.appendChild(card);
-                });
+                container.appendChild(createStatCard("総投票数", totalVotes, "すべての問題の合計投票数"));
+                container.appendChild(createStatCard("登録者数", allVoters.length, "投票したユニークな人数"));
+                container.appendChild(createStatCard("問題数", questions.filter((q) => q).length, "作成済み問題"));
             }
 
-            // 選択肢追加・削除
             function addOption() {
                 optionCount++;
                 const container = document.getElementById("options-container");
                 const newOption = document.createElement("div");
                 newOption.className = "option-input";
                 const textInput = document.createElement("input");
-                textInput.type = "text";
-                textInput.placeholder = `選択肢${optionCount}`;
-                textInput.id = `option${optionCount - 1}`;
+                textInput.type = "text"; textInput.placeholder = `選択肢${optionCount}`; textInput.id = `option${optionCount - 1}`;
                 const radioInput = document.createElement("input");
-                radioInput.type = "radio";
-                radioInput.name = "correctAnswer";
-                radioInput.value = optionCount - 1;
+                radioInput.type = "radio"; radioInput.name = "correctAnswer"; radioInput.value = optionCount - 1;
                 const labelText = document.createTextNode(" 正解");
-                newOption.appendChild(textInput);
-                newOption.appendChild(radioInput);
-                newOption.appendChild(labelText);
+                newOption.appendChild(textInput); newOption.appendChild(radioInput); newOption.appendChild(labelText);
                 container.appendChild(newOption);
             }
 
@@ -690,7 +718,6 @@
                 }
             }
 
-            // 問題作成
             function createQuestion() {
                 const title = document.getElementById("newQuestionTitle").value.trim();
                 if (!title) return showMessage("error", "問題タイトルを入力してください。");
@@ -705,9 +732,9 @@
                 const correctRadio = document.querySelector('input[name="correctAnswer"]:checked');
                 if (!correctRadio) return showMessage("error", "正解を選択してください。");
 
-                const allQuestions = getQuestions();
+                const allQuestions = questions;
                 const newQuestion = {
-                    id: allQuestions.length > 0 ? Math.max(...allQuestions.map((q) => q.id)) + 1 : 1,
+                    id: allQuestions.length > 0 ? Math.max(...allQuestions.filter(q => q).map((q) => q.id)) + 1 : 1,
                     title: title,
                     description: document.getElementById("newQuestionDescription").value.trim(),
                     options: options,
@@ -716,156 +743,41 @@
                     votes: new Array(options.length).fill(0),
                 };
 
-                allQuestions.push(newQuestion);
+                const emptyIndex = allQuestions.findIndex(q => q === null);
+                if(emptyIndex !== -1) { allQuestions[emptyIndex] = newQuestion; } else { allQuestions.push(newQuestion); }
                 saveQuestions(allQuestions);
 
-                // フォームリセット
                 document.getElementById("newQuestionTitle").value = "";
                 document.getElementById("newQuestionDescription").value = "";
                 for (let i = 0; i < optionCount; i++) document.getElementById(`option${i}`).value = "";
                 correctRadio.checked = false;
-
                 showMessage("success", "新しい問題を作成しました。");
             }
 
-            // 問題の有効化・無効化
             function toggleQuestion(questionId) {
-                const allQuestions = getQuestions();
-                const question = allQuestions.find((q) => q && q.id === questionId);
-                if (question) {
-                    question.active = !question.active;
-                    saveQuestions(allQuestions);
-                }
+                const q = questions.find((q) => q && q.id === questionId);
+                if (q) { q.active = !q.active; saveQuestions(questions); }
             }
 
-            // 問題削除
             function deleteQuestion(questionId) {
                 if (confirm("この問題を削除しますか？")) {
-                    let allQuestions = getQuestions();
-                    // Firebaseでは配列の要素を直接削除するより、nullで上書きするのが簡単
-                    const questionIndex = allQuestions.findIndex((q) => q && q.id === questionId);
-                    if (questionIndex !== -1) {
-                        allQuestions[questionIndex] = null;
+                    const qIndex = questions.findIndex((q) => q && q.id === questionId);
+                    if (qIndex !== -1) {
+                        if (currentQuestionId === questionId) {
+                            setCurrentQuestion(null); // 出題中に削除されたら停止する
+                        }
+                        questions[qIndex] = null;
                     }
-                    saveQuestions(allQuestions);
+                    saveQuestions(questions);
                 }
             }
 
-            // 投票処理
-            function submitVote() {
-                const voterName = document.getElementById("voterName").value.trim();
-                if (!voterName) return showMessage("error", "お名前を入力してください。");
-
-                const allVoters = getVoters();
-                if (allVoters.includes(voterName)) return showMessage("error", "このお名前は既に投票済みです。");
-
-                const activeQuestions = getQuestions().filter((q) => q && q.active);
-                const currentUserVotes = getVotes();
-                const allQuestions = getQuestions();
-
-                let hasVoted = false;
-                activeQuestions.forEach((question) => {
-                    const selectedOption = document.querySelector(`input[name="vote-${question.id}"]:checked`);
-                    if (selectedOption) {
-                        const optionIndex = parseInt(selectedOption.value);
-                        const questionInAll = allQuestions.find((q) => q && q.id === question.id);
-                        if (!questionInAll.votes) {
-                            // 念のため初期化
-                            questionInAll.votes = new Array(questionInAll.options.length).fill(0);
-                        }
-                        questionInAll.votes[optionIndex]++;
-
-                        if (!currentUserVotes[voterName]) currentUserVotes[voterName] = {};
-                        currentUserVotes[voterName][question.id] = optionIndex;
-                        hasVoted = true;
-                    }
-                });
-
-                if (!hasVoted) return showMessage("error", "少なくとも1つの問題に回答してください。");
-
-                saveQuestions(allQuestions);
-                saveVotes(currentUserVotes);
-                allVoters.push(voterName);
-                saveVoters(allVoters);
-
-                showMessage("success", "投票が完了しました！ありがとうございます。");
-                document.getElementById("voteButton").disabled = true;
-                document.getElementById("voterName").disabled = true;
-                document.querySelectorAll('input[type="radio"]').forEach((input) => (input.disabled = true));
-
-                setTimeout(() => showResults(), 1500);
-            }
-
-            // 結果表示
-            function showResults() {
-                const activeQuestions = getQuestions().filter((q) => q && q.active);
-                const resultsDiv = document.getElementById("results");
-                const resultsListDiv = document.getElementById("resultsList");
-
-                if (activeQuestions.length === 0) return showMessage("error", "アクティブな問題がありません。");
-
-                let totalVotes = 0;
-                resultsListDiv.innerHTML = "";
-
-                activeQuestions.forEach((question) => {
-                    const questionTotalVotes = question.votes ? question.votes.reduce((sum, count) => sum + count, 0) : 0;
-                    totalVotes += questionTotalVotes;
-
-                    const questionTitle = document.createElement("h4");
-                    questionTitle.textContent = question.title;
-                    resultsListDiv.appendChild(questionTitle);
-
-                    question.options.forEach((option, index) => {
-                        const count = question.votes ? question.votes[index] : 0;
-                        const percentage = questionTotalVotes > 0 ? ((count / questionTotalVotes) * 100).toFixed(1) : 0;
-
-                        const resultItem = document.createElement("div");
-                        resultItem.className = "result-item";
-
-                        const optionSpan = document.createElement("span");
-                        const strongEl = document.createElement("strong");
-                        strongEl.textContent = option;
-                        optionSpan.appendChild(strongEl);
-
-                        const countSpan = document.createElement("span");
-                        countSpan.textContent = `${count}票 (${percentage}%)`;
-
-                        resultItem.appendChild(optionSpan);
-                        resultItem.appendChild(countSpan);
-
-                        const resultBar = document.createElement("div");
-                        resultBar.className = "result-bar";
-                        resultBar.style.width = `${percentage}%`;
-
-                        resultsListDiv.appendChild(resultItem);
-                        resultsListDiv.appendChild(resultBar);
-                    });
-                });
-
-                document.getElementById("totalVotes").textContent = totalVotes;
-                resultsDiv.style.display = "block";
-            }
-
-            // メッセージ表示
             function showMessage(type, message) {
-                document.getElementById("successMessage").style.display = "none";
-                document.getElementById("errorMessage").style.display = "none";
-
                 const messageElement = document.getElementById(type + "Message");
                 messageElement.textContent = (type === "success" ? "✅ " : "❌ ") + message;
                 messageElement.style.display = "block";
-
-                setTimeout(() => {
-                    messageElement.style.display = "none";
-                }, 3000);
+                setTimeout(() => { messageElement.style.display = "none"; }, 3000);
             }
-
-            // 初期化
-            window.onload = function () {
-                // Firebaseのon()が自動で描画するので、ここでの呼び出しは不要になることが多い
-                // もし初期表示がうまくいかない場合は、以下の行のコメントを外す
-                // renderQuestions();
-            };
         </script>
     </body>
 </html>
