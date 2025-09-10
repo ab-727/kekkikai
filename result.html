@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>結果発表</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f0f2f5; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; text-align: center; }
+        .container { background: white; padding: 40px 60px; border-radius: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12); width: 90%; max-width: 1200px; }
+        h1 { font-size: 3.5rem; color: #333; margin-bottom: 40px; }
+        #result-display { transition: opacity 0.5s ease; }
+        .options-list { list-style: none; padding: 0; margin: 0; }
+        .options-list li { background-color: #f8f9fa; border: 2px solid #e9ecef; border-radius: 8px; padding: 20px; margin-bottom: 15px; font-size: 2rem; font-weight: 500; transition: all 0.3s ease; }
+        .result-item { margin-bottom: 15px; text-align: left; }
+        .result-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 1.8rem; font-weight: 500; }
+        .result-bar-container { background: #e9ecef; border-radius: 10px; height: 40px; overflow: hidden; }
+        .result-bar { background: linear-gradient(90deg, #007bff, #0056b3); height: 100%; border-radius: 10px; transition: width 0.8s ease-in-out; display: flex; align-items: center; justify-content: flex-end; color: white; font-size: 1.2rem; padding-right: 15px; }
+        .result-item.correct { background-color: #d4edda; border-color: #28a745; }
+        .result-item.correct .result-bar { background: linear-gradient(90deg, #28a745, #1e7e34); }
+        .result-item.correct .result-info { color: #155724; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="result-display">
+            <h1>結果発表</h1>
+            <p style="font-size: 1.5rem; color: #666;">管理者が問題を選択するまでお待ちください...</p>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyA0G-ZXD_90Tk698OzmDmDSObURkxgmsEE",
+            authDomain: "kekki-c7090.firebaseapp.com",
+            databaseURL: "https://kekki-c7090-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "kekki-c7090",
+            storageBucket: "kekki-c7090.firebasestorage.app",
+            messagingSenderId: "6528604747",
+            appId: "1:6528604747:web:d1cd3a5e9d6e70a1e48bce",
+            measurementId: "G-S44YVP0G3N",
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let allQuestions = [];
+        let currentState = {};
+
+        // 最初に全問題データを取得
+        db.ref('questions').on('value', snapshot => {
+            allQuestions = snapshot.val() || [];
+            renderResults(); // データの更新があったら再描画
+        });
+
+        // 状態を監視
+        db.ref('state').on('value', snapshot => {
+            currentState = snapshot.val() || {};
+            renderResults(); // 状態の更新があったら再描画
+        });
+
+        function renderResults() {
+            const container = document.getElementById('result-display');
+            container.style.opacity = 0; // フェードアウト
+
+            const { currentQuestionId, resultView } = currentState;
+
+            if (!currentQuestionId || !allQuestions.length) {
+                container.innerHTML = `<h1>結果発表</h1><p style="font-size: 1.5rem; color: #666;">管理者が問題を選択するまでお待ちください...</p>`;
+                container.style.opacity = 1;
+                return;
+            }
+
+            const question = allQuestions.find(q => q && q.id === currentQuestionId);
+            if (!question) {
+                container.innerHTML = `<h1>エラー</h1><p>問題が見つかりません。</p>`;
+                container.style.opacity = 1;
+                return;
+            }
+
+            // --- 描画処理 ---
+            setTimeout(() => {
+                container.innerHTML = `<h1>${question.title}</h1>`;
+                const totalVotes = question.votes ? question.votes.reduce((a, b) => a + b, 0) : 0;
+                
+                // 状態1: 選択肢のみ表示
+                if (resultView === 1) {
+                    const optionsList = document.createElement('ul');
+                    optionsList.className = 'options-list';
+                    question.options.forEach(option => {
+                        const li = document.createElement('li');
+                        li.textContent = option;
+                        optionsList.appendChild(li);
+                    });
+                    container.appendChild(optionsList);
+                }
+                // 状態2 & 3: グラフ・正解表示
+                else if (resultView === 2 || resultView === 3) {
+                    const resultsContainer = document.createElement('div');
+                    question.options.forEach((option, index) => {
+                        const count = question.votes ? question.votes[index] : 0;
+                        const percentage = totalVotes > 0 ? (count / totalVotes) * 100 : 0;
+                        const isCorrect = (index === question.correctAnswer);
+
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'result-item';
+                        if (resultView === 3 && isCorrect) {
+                            itemDiv.classList.add('correct');
+                        }
+
+                        itemDiv.innerHTML = `
+                            <div class="result-info">
+                                <span class="option-name">${option} ${resultView === 3 && isCorrect ? '<strong>(正解)</strong>' : ''}</span>
+                                <span class="vote-count">${count}票 (${percentage.toFixed(1)}%)</span>
+                            </div>
+                            <div class="result-bar-container">
+                                <div class="result-bar" style="width: 0%;"></div>
+                            </div>
+                        `;
+                        resultsContainer.appendChild(itemDiv);
+
+                        // アニメーションのために遅延実行
+                        setTimeout(() => {
+                           itemDiv.querySelector('.result-bar').style.width = `${percentage}%`;
+                        }, 100);
+                    });
+                    container.appendChild(resultsContainer);
+                }
+                // デフォルト（状態が設定されていないなど）
+                else {
+                     container.innerHTML += `<p style="font-size: 1.5rem; color: #666;">表示を待機しています...</p>`
+                }
+                container.style.opacity = 1; // フェードイン
+            }, 500); // 0.5秒のディレイ
+        }
+    </script>
+</body>
+</html>
