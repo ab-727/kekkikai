@@ -18,6 +18,14 @@
         .result-item.correct { background-color: #d4edda; border-color: #28a745; }
         .result-item.correct .result-bar { background: linear-gradient(90deg, #28a745, #1e7e34); }
         .result-item.correct .result-info { color: #155724; }
+        
+        /* 【修正】最終成績発表のスタイル */
+        .final-results-container { text-align: center; cursor: pointer; }
+        .winner-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; list-style: none; padding: 0; }
+        .winner-list li { background: #fff3cd; color: #856404; border: 2px solid #ffeeba; padding: 15px 25px; border-radius: 8px; font-size: 2.2rem; font-weight: bold; }
+        .winner-score { font-size: 1.5rem; color: #666; margin-top: 15px; }
+        .reveal-prompt p { font-size: 1.5rem; color: #888; margin-top: 20px; }
+        .winner-reveal { display: none; } /* 初期状態では非表示 */
     </style>
 </head>
 <body>
@@ -31,107 +39,105 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyA0G-ZXD_90Tk698OzmDmDSObURkxgmsEE",
-            authDomain: "kekki-c7090.firebaseapp.com",
-            databaseURL: "https://kekki-c7090-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "kekki-c7090",
-            storageBucket: "kekki-c7090.firebasestorage.app",
-            messagingSenderId: "6528604747",
-            appId: "1:6528604747:web:d1cd3a5e9d6e70a1e48bce",
-            measurementId: "G-S44YVP0G3N",
-        };
+        const firebaseConfig = { apiKey: "AIzaSyA0G-ZXD_90Tk698OzmDmDSObURkxgmsEE", authDomain: "kekki-c7090.firebaseapp.com", databaseURL: "https://kekki-c7090-default-rtdb.asia-southeast1.firebasedatabase.app", projectId: "kekki-c7090", storageBucket: "kekki-c7090.firebasestorage.app", messagingSenderId: "6528604747", appId: "1:6528604747:web:d1cd3a5e9d6e70a1e48bce", measurementId: "G-S44YVP0G3N" };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        let allQuestions = [];
-        let currentState = {};
+        let allQuestions = [], allUserVotes = {}, currentState = {};
 
-        // 最初に全問題データを取得
-        db.ref('questions').on('value', snapshot => {
-            allQuestions = snapshot.val() || [];
-            renderResults(); // データの更新があったら再描画
-        });
-
-        // 状態を監視
-        db.ref('state').on('value', snapshot => {
-            currentState = snapshot.val() || {};
-            renderResults(); // 状態の更新があったら再描画
-        });
+        db.ref('questions').on('value', snapshot => { allQuestions = snapshot.val() || []; renderResults(); });
+        db.ref('userVotes').on('value', snapshot => { allUserVotes = snapshot.val() || []; renderResults(); });
+        db.ref('state').on('value', snapshot => { currentState = snapshot.val() || {}; renderResults(); });
+        
+        // 【追加】クリックで結果を表示する関数
+        function revealWinners() {
+            const prompt = document.getElementById('reveal-prompt');
+            const reveal = document.getElementById('winner-reveal');
+            if (prompt && reveal) {
+                prompt.style.display = 'none';
+                reveal.style.display = 'block';
+            }
+        }
 
         function renderResults() {
             const container = document.getElementById('result-display');
-            container.style.opacity = 0; // フェードアウト
-
+            container.style.opacity = 0;
             const { currentQuestionId, resultView } = currentState;
-
-            if (!currentQuestionId || !allQuestions.length) {
+            if (resultView !== 4 && (!currentQuestionId || !allQuestions.length)) {
                 container.innerHTML = `<h1>結果発表</h1><p style="font-size: 1.5rem; color: #666;">管理者が問題を選択するまでお待ちください...</p>`;
-                container.style.opacity = 1;
-                return;
+                container.style.opacity = 1; return;
             }
-
             const question = allQuestions.find(q => q && q.id === currentQuestionId);
-            if (!question) {
+            if (resultView !== 4 && !question) {
                 container.innerHTML = `<h1>エラー</h1><p>問題が見つかりません。</p>`;
-                container.style.opacity = 1;
-                return;
+                container.style.opacity = 1; return;
             }
 
-            // --- 描画処理 ---
             setTimeout(() => {
-                container.innerHTML = `<h1>${question.title}</h1>`;
-                const totalVotes = question.votes ? question.votes.reduce((a, b) => a + b, 0) : 0;
-                
-                // 状態1: 選択肢のみ表示
-                if (resultView === 1) {
-                    const optionsList = document.createElement('ul');
-                    optionsList.className = 'options-list';
-                    question.options.forEach(option => {
-                        const li = document.createElement('li');
-                        li.textContent = option;
-                        optionsList.appendChild(li);
-                    });
+                // 【修正】状態4: 最終成績発表（クリック前の画面とクリック後の画面を両方生成）
+                if (resultView === 4) {
+                    const scores = {};
+                    for (const voterName in allUserVotes) {
+                        scores[voterName] = 0;
+                        for (const qId in allUserVotes[voterName]) {
+                            const votedOption = allUserVotes[voterName][qId];
+                            const q = allQuestions.find(item => item && item.id === parseInt(qId));
+                            if (q && q.correctAnswer === votedOption) {
+                                scores[voterName]++;
+                            }
+                        }
+                    }
+                    const maxScore = Math.max(0, ...Object.values(scores));
+                    const winners = Object.keys(scores).filter(voter => scores[voter] === maxScore);
+                    
+                    container.innerHTML = `
+                        <div class="final-results-container" onclick="revealWinners()">
+                            <div id="reveal-prompt">
+                                <h1>いよいよ最終成績発表！</h1>
+                            </div>
+                            <div id="winner-reveal" class="winner-reveal">
+                                <h1>🏆 最終成績発表 🏆</h1>
+                                <ul class="winner-list">
+                                    ${winners.map(name => `<li>${name} 様</li>`).join('')}
+                                </ul>
+                                <p class="winner-score">${winners.length > 0 ? `正解数: ${maxScore}問` : '該当者なし'}</p>
+                            </div>
+                        </div>
+                    `;
+                }
+                // 状態1: 選択肢のみ
+                else if (resultView === 1) {
+                    container.innerHTML = `<h1>${question.title}</h1>`;
+                    const optionsList = document.createElement('ul'); optionsList.className = 'options-list';
+                    question.options.forEach(option => { const li = document.createElement('li'); li.textContent = option; optionsList.appendChild(li); });
                     container.appendChild(optionsList);
                 }
-                // 状態2 & 3: グラフ・正解表示
+                // 状態2 & 3: グラフ・正解
                 else if (resultView === 2 || resultView === 3) {
+                    container.innerHTML = `<h1>${question.title}</h1>`;
+                    const totalVotes = question.votes ? question.votes.reduce((a, b) => a + b, 0) : 0;
                     const resultsContainer = document.createElement('div');
                     question.options.forEach((option, index) => {
-                        const count = question.votes ? question.votes[index] : 0;
-                        const percentage = totalVotes > 0 ? (count / totalVotes) * 100 : 0;
-                        const isCorrect = (index === question.correctAnswer);
-
-                        const itemDiv = document.createElement('div');
-                        itemDiv.className = 'result-item';
-                        if (resultView === 3 && isCorrect) {
-                            itemDiv.classList.add('correct');
-                        }
-
+                        const count = question.votes ? question.votes[index] : 0; const percentage = totalVotes > 0 ? (count / totalVotes) * 100 : 0;
+                        const isCorrect = (index === question.correctAnswer); const itemDiv = document.createElement('div'); itemDiv.className = 'result-item';
+                        if (resultView === 3 && isCorrect) itemDiv.classList.add('correct');
                         itemDiv.innerHTML = `
                             <div class="result-info">
                                 <span class="option-name">${option} ${resultView === 3 && isCorrect ? '<strong>(正解)</strong>' : ''}</span>
                                 <span class="vote-count">${count}票 (${percentage.toFixed(1)}%)</span>
                             </div>
-                            <div class="result-bar-container">
-                                <div class="result-bar" style="width: 0%;"></div>
-                            </div>
-                        `;
+                            <div class="result-bar-container"><div class="result-bar" style="width: 0%;"></div></div>`;
                         resultsContainer.appendChild(itemDiv);
-
-                        // アニメーションのために遅延実行
-                        setTimeout(() => {
-                           itemDiv.querySelector('.result-bar').style.width = `${percentage}%`;
-                        }, 100);
+                        setTimeout(() => { itemDiv.querySelector('.result-bar').style.width = `${percentage}%`; }, 100);
                     });
                     container.appendChild(resultsContainer);
                 }
-                // デフォルト（状態が設定されていないなど）
+                // デフォルト
                 else {
-                     container.innerHTML += `<p style="font-size: 1.5rem; color: #666;">表示を待機しています...</p>`
+                    container.innerHTML = `<h1>${question.title}</h1><p style="font-size: 1.5rem; color: #666;">表示を待機しています...</p>`
                 }
-                container.style.opacity = 1; // フェードイン
-            }, 500); // 0.5秒のディレイ
+                container.style.opacity = 1;
+            }, 500);
         }
     </script>
 </body>
